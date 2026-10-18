@@ -1,11 +1,14 @@
 import uuid
 from datetime import datetime
-from airflow import DAG
-from airflow.operators.python import PythonOperator
+
+# Airflow 3: DAG now lives in airflow.sdk, and PythonOperator moved to the standard provider
+# (the old airflow.operators.python import still works but is deprecated).
+from airflow.sdk import DAG
+from airflow.providers.standard.operators.python import PythonOperator
 
 default_args = {
     'owner': 'airscholar',
-    'start_date': datetime(2023, 9, 3, 10, 00)
+    'start_date': datetime(2026, 9, 3, 10, 00)
 }
 
 def get_data():
@@ -20,13 +23,16 @@ def get_data():
 def format_data(res):
     data = {}
     location = res['location']
-    data['id'] = uuid.uuid4()
+    # str(): a raw UUID object can't be serialised by json.dumps, so in the original every
+    # message failed in stream_data() and nothing ever reached Kafka.
+    data['id'] = str(uuid.uuid4())
     data['first_name'] = res['name']['first']
     data['last_name'] = res['name']['last']
     data['gender'] = res['gender']
     data['address'] = f"{str(location['street']['number'])} {location['street']['name']}, " \
                       f"{location['city']}, {location['state']}, {location['country']}"
-    data['post_code'] = location['postcode']
+    # The API returns a number for some countries and a string for others.
+    data['post_code'] = str(location['postcode'])
     data['email'] = res['email']
     data['username'] = res['login']['username']
     data['dob'] = res['dob']['date']
@@ -57,9 +63,12 @@ def stream_data():
             logging.error(f'An error occured: {e}')
             continue
 
+    # send() is asynchronous; make sure everything is delivered before the task ends.
+    producer.flush()
+
 with DAG('user_automation',
          default_args=default_args,
-         schedule_interval='@daily',
+         schedule='@daily',  # Airflow 3 removed schedule_interval
          catchup=False) as dag:
 
     streaming_task = PythonOperator(

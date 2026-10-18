@@ -1,9 +1,30 @@
 import logging
+import os
+import uuid
 
+import pyspark
 from cassandra.cluster import Cluster
+from cassandra.concurrent import execute_concurrent_with_args
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StructField, StringType
+
+# Where Kafka and Cassandra are reachable from the machine running this script.
+# On your laptop the defaults work, because docker-compose.yml publishes Kafka on
+# 9092 and Cassandra on 9042. If you run the script inside the Docker network,
+# set KAFKA_BOOTSTRAP_SERVERS=broker:29092 and CASSANDRA_HOST=cassandra instead.
+KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+CASSANDRA_HOST = os.getenv('CASSANDRA_HOST', 'localhost')
+
+# The Kafka connector has to match the Spark version exactly (Spark 4.x is Scala 2.13 only).
+# Using pyspark.__version__ keeps it in step with the installed pyspark (4.2.0 here,
+# matching the Spark 4.2.0 cluster in docker-compose.yml).
+KAFKA_PACKAGE = f"org.apache.spark:spark-sql-kafka-0-10_2.13:{pyspark.__version__}"
+
+CASSANDRA_COLUMNS = ['id', 'first_name', 'last_name', 'gender', 'address', 'post_code',
+                     'email', 'username', 'registered_date', 'phone', 'picture']
+INSERT_CQL = (f"INSERT INTO spark_streams.created_users ({', '.join(CASSANDRA_COLUMNS)}) "
+              f"VALUES ({', '.join(['?'] * len(CASSANDRA_COLUMNS))})")
 
 
 def create_keyspace(session):
@@ -52,7 +73,7 @@ def insert_data(session, **kwargs):
 
     try:
         session.execute("""
-            INSERT INTO spark_streams.created_users(id, first_name, last_name, gender, address, 
+            INSERT INTO spark_streams.created_users(id, first_name, last_name, gender, address,
                 post_code, email, username, dob, registered_date, phone, picture)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (user_id, first_name, last_name, gender, address,
@@ -67,11 +88,12 @@ def create_spark_connection():
     s_conn = None
 
     try:
+        # Only the Kafka connector is needed now. The DataStax spark-cassandra-connector
+        # (latest 3.5.1) is built for Spark 3.5 and has no Spark 4 release, so the
+        # Cassandra writes below go through the Python cassandra-driver instead.
         s_conn = SparkSession.builder \
             .appName('SparkDataStreaming') \
-            .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector_2.13:3.4.1,"
-                                           "org.apache.spark:spark-sql-kafka-0-10_2.13:3.4.1") \
-            .config('spark.cassandra.connection.host', 'localhost') \
+            .config('spark.jars.packages', KAFKA_PACKAGE) \
             .getOrCreate()
 
         s_conn.sparkContext.setLogLevel("ERROR")
@@ -87,7 +109,7 @@ def connect_to_kafka(spark_conn):
     try:
         spark_df = spark_conn.readStream \
             .format('kafka') \
-            .option('kafka.bootstrap.servers', 'localhost:9092') \
+            .option('kafka.bootstrap.servers', KAFKA_BOOTSTRAP_SERVERS) \
             .option('subscribe', 'users_created') \
             .option('startingOffsets', 'earliest') \
             .load()
@@ -101,7 +123,7 @@ def connect_to_kafka(spark_conn):
 def create_cassandra_connection():
     try:
         # connecting to the cassandra cluster
-        cluster = Cluster(['localhost'])
+        cluster = Cluster([CASSANDRA_HOST])
 
         cas_session = cluster.connect()
 
@@ -133,6 +155,38 @@ def create_selection_df_from_kafka(spark_df):
     return sel
 
 
+def make_cassandra_batch_writer(session):
+    """Build the function Spark calls for every micro-batch.
+
+    Replaces the old 'org.apache.spark.sql.cassandra' sink. Rows are pulled to the
+    driver and inserted with the Python cassandra-driver, which is fine for the small
+    volumes this pipeline handles. Inserts are keyed on id, so a retried batch just
+    overwrites the same rows.
+    """
+    insert = session.prepare(INSERT_CQL)
+
+    def write_batch(batch_df, batch_id):
+        params = []
+        for row in batch_df.toLocalIterator():
+            if row['id'] is None:
+                continue
+            params.append((uuid.UUID(row['id']),) + tuple(row[c] for c in CASSANDRA_COLUMNS[1:]))
+
+        if not params:
+            return
+
+        results = execute_concurrent_with_args(session, insert, params,
+                                               concurrency=50, raise_on_first_error=False)
+        failed = [err for ok, err in results if not ok]
+        if failed:
+            # Raising makes Spark retry the batch from the checkpoint.
+            raise RuntimeError(f"{len(failed)} of {len(params)} rows failed in batch {batch_id}: {failed[0]}")
+
+        logging.info(f"Batch {batch_id}: wrote {len(params)} rows to Cassandra")
+
+    return write_batch
+
+
 if __name__ == "__main__":
     # create spark connection
     spark_conn = create_spark_connection()
@@ -149,10 +203,9 @@ if __name__ == "__main__":
 
             logging.info("Streaming is being started...")
 
-            streaming_query = (selection_df.writeStream.format("org.apache.spark.sql.cassandra")
+            streaming_query = (selection_df.writeStream
+                               .foreachBatch(make_cassandra_batch_writer(session))
                                .option('checkpointLocation', '/tmp/checkpoint')
-                               .option('keyspace', 'spark_streams')
-                               .option('table', 'created_users')
                                .start())
 
             streaming_query.awaitTermination()
