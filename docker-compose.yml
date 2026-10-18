@@ -3,6 +3,12 @@
 #   Confluent Platform 8.3.1, Control Center next-gen 2.5.0, Airflow 3.3.2,
 #   Postgres 18, Spark 4.2.0 (official image), Cassandra 5.0
 
+# Airflow (Dags)   localhost:8080  
+
+# Control Center   localhost:9021
+
+# Spark Master UI  localhost:9090
+
 x-airflow-common: &airflow-common
   # Extends the official image with your requirements.txt (replaces the old
   # "pip install" at scheduler start). Rebuild with: docker compose build
