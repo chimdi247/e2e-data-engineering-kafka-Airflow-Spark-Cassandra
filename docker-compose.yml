@@ -124,11 +124,11 @@ services:
     hostname: prometheus
     container_name: prometheus
     volumes:
-      - c3-config:/mnt/config
+      - ./vol/config:/mnt/config
     environment:
       CONFIG_PATH: "/mnt/config"
       SHOULD_LOG_TO_FILE: "false"
-      LOG_FILE: "/dev/null"
+
     networks:
       - confluent
 
@@ -139,11 +139,11 @@ services:
     depends_on:
       - prometheus
     volumes:
-      - c3-config:/mnt/config
+      - ./vol/config:/mnt/config
     environment:
       CONFIG_PATH: "/mnt/config"
       SHOULD_LOG_TO_FILE: "false"
-      LOG_FILE: "/dev/null"
+
     networks:
       - confluent
 
@@ -163,7 +163,8 @@ services:
     ports:
       - "9021:9021"
     volumes:
-      - c3-config:/mnt/config
+      - ./vol/config:/mnt/config
+    command: "bash -c 'dub template /etc/confluent/docker/control-center.properties.template /etc/confluent-control-center/control-center.properties && /etc/confluent/docker/run'"
     environment:
       CONTROL_CENTER_BOOTSTRAP_SERVERS: 'broker:29092'
       CONTROL_CENTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
