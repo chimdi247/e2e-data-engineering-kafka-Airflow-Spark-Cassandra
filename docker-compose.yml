@@ -112,7 +112,7 @@ services:
     networks:
       - confluent
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8081' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -225,7 +225,7 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080/api/v2/monitor/health"]
       interval: 30s
       timeout: 10s
       retries: 5
