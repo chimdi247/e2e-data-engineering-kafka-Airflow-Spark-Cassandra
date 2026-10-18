@@ -3,6 +3,21 @@
 #   Confluent Platform 8.3.1, Control Center next-gen 2.5.0, Airflow 3.3.2,
 #   Postgres 18, Spark 4.2.0 (official image), Cassandra 5.0
 
+#sudo apt update
+#sudo apt install openjdk-21-jdk -y
+
+#export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
+#export PATH=$JAVA_HOME/bin:$PATH
+
+
+#Trigger the Airflow DAG: Head over to your Airflow UI and trigger the user_automation DAG.
+#This will run kafka_stream.py, fetch user data from the Random User API,
+#and publish it to the users_created Kafka topic.
+
+# or run dags/kafka_stream.py
+#python3 spark_stream.py
+
+
 # Airflow (Dags)   localhost:8080
 
 # Control Center   localhost:9021
