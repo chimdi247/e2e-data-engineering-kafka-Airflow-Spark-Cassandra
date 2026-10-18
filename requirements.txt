@@ -11,7 +11,7 @@ kafka-python==3.0.11
 
 # Only if your DAGs run Spark code inside the Airflow container (needs Java in the image).
 # The cluster in docker-compose.yml runs Spark 4.2.0, so keep the versions identical.
-# pyspark==4.2.0
+pyspark==4.2.0
 
 # Optional Airflow providers (already pinned by the constraints file above):
 # apache-airflow-providers-apache-kafka
