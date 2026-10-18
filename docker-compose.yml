@@ -3,7 +3,7 @@
 #   Confluent Platform 8.3.1, Control Center next-gen 2.5.0, Airflow 3.3.2,
 #   Postgres 18, Spark 4.2.0 (official image), Cassandra 5.0
 
-# Airflow (Dags)   localhost:8080  
+# Airflow (Dags)   localhost:8080
 
 # Control Center   localhost:9021
 
@@ -56,7 +56,7 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker:29092,PLAINTEXT_HOST://136.115.112.248:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1

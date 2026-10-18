@@ -49,6 +49,7 @@ def stream_data():
     import logging
 
     producer = KafkaProducer(bootstrap_servers=['broker:29092'], max_block_ms=5000)
+#   producer = KafkaProducer(bootstrap_servers=['localhost:9092'], max_block_ms=5000)  local run
     curr_time = time.time()
 
     while True:
